@@ -1,0 +1,135 @@
+# portfolio-app/docker-compose.yml
+# 로컬 통합 동작 검증용. 운영 배포는 K8s 매니페스트로 (Phase 3에서 작성)
+
+services:
+  # ========================================
+  # PostgreSQL — 로컬 통합 테스트용
+  # ========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: portfolio
+      POSTGRES_PASSWORD: portfolio
+      POSTGRES_MULTIPLE_DATABASES: productdb,orderdb,paymentdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portfolio"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - portfolio-net
+
+  # ========================================
+  # product-service
+  # ========================================
+  product-service:
+    image: portfolio/product-service:0.1.0
+    container_name: product-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 8081
+      DB_URL: jdbc:postgresql://postgres:5432/productdb
+      DB_USERNAME: portfolio
+      DB_PASSWORD: portfolio
+      DB_DRIVER: org.postgresql.Driver
+      JPA_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+      JPA_DDL_AUTO: update
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health/liveness"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+    networks:
+      - portfolio-net
+
+  # ========================================
+  # payment-service
+  # ========================================
+  payment-service:
+    image: portfolio/payment-service:0.1.0
+    container_name: payment-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 8083
+      DB_URL: jdbc:postgresql://postgres:5432/paymentdb
+      DB_USERNAME: portfolio
+      DB_PASSWORD: portfolio
+      DB_DRIVER: org.postgresql.Driver
+      JPA_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+      JPA_DDL_AUTO: update
+      # Chaos 시뮬레이션 활성화 (시연용)
+      CHAOS_ENABLED: "true"
+      CHAOS_ERROR_RATE: "5"
+      CHAOS_MIN_DELAY: "100"
+      CHAOS_MAX_DELAY: "2000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/actuator/health/liveness"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+    networks:
+      - portfolio-net
+
+  # ========================================
+  # order-service (product, payment 호출)
+  # ========================================
+  order-service:
+    image: portfolio/order-service:0.1.0
+    container_name: order-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 8082
+      DB_URL: jdbc:postgresql://postgres:5432/orderdb
+      DB_USERNAME: portfolio
+      DB_PASSWORD: portfolio
+      DB_DRIVER: org.postgresql.Driver
+      JPA_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+      JPA_DDL_AUTO: update
+      # 다운스트림 서비스 URL (Docker 내부 DNS 사용)
+      PRODUCT_SERVICE_URL: http://product-service:8081
+      PAYMENT_SERVICE_URL: http://payment-service:8083
+    depends_on:
+      postgres:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health/liveness"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+    networks:
+      - portfolio-net
+
+# ========================================
+# 공통 네트워크 — Docker 내부 DNS로 서비스 이름 호출 가능
+# ========================================
+networks:
+  portfolio-net:
+    driver: bridge
+
+volumes:
+  postgres-data:

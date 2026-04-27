@@ -103,7 +103,7 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: ${JPA_DDL_AUTO:validate} # ⭐ 환경변수 우선, 없으면 validate
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
