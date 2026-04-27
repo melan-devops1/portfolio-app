@@ -1,0 +1,119 @@
+spring:
+  application:
+    name: order-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+  datasource:
+    url: ${DB_URL:jdbc:h2:mem:orderdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: true
+    open-in-view: false
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+server:
+  port: ${SERVER_PORT:8082}      # ⭐ order-service는 8082
+  shutdown: graceful
+
+# ==================== 외부 서비스 URL (환경변수로 주입 가능) ====================
+external:
+  product-service:
+    url: ${PRODUCT_SERVICE_URL:http://localhost:8081}
+    timeout-ms: 3000
+  payment-service:
+    url: ${PAYMENT_SERVICE_URL:http://localhost:8083}
+    timeout-ms: 5000
+
+# ==================== Actuator ====================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,env,loggers
+      base-path: /actuator
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+      show-components: always
+    prometheus:
+      access: read-only
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  info:
+    env:
+      enabled: true
+    build:
+      enabled: true
+    git:
+      enabled: true
+
+info:
+  app:
+    description: Order microservice for DevOps portfolio
+    profile: ${spring.profiles.active}
+
+logging:
+  level:
+    root: INFO
+    com.portfolio: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://postgres:5432/orderdb}
+    username: ${DB_USERNAME:order}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+  h2:
+    console:
+      enabled: false
+
+logging:
+  level:
+    root: INFO
+    com.portfolio: INFO
+    org.hibernate.SQL: INFO
