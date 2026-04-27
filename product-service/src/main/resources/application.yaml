@@ -1,0 +1,106 @@
+spring:
+  application:
+    name: product-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  # ⭐ Graceful shutdown timeout (K8s preStop hook과 정합)
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  # DB 설정 (환경변수 주입 가능, K8s에서 ConfigMap/Secret 연동)
+  datasource:
+    url: ${DB_URL:jdbc:h2:mem:productdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: ${JPA_DIALECT:org.hibernate.dialect.H2Dialect}
+    show-sql: true
+
+  # H2 콘솔 (로컬에서만 활성화)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+server:
+  port: ${SERVER_PORT:8081}
+  shutdown: graceful   # ⭐ K8s에서 Pod 종료 시 in-flight 요청 대기
+
+# ==================== ⭐ DevOps 핵심: Actuator ====================
+management:
+  endpoints:
+    web:
+      exposure:
+        # Prometheus가 긁어갈 엔드포인트 + K8s 프로브용 health
+        include: health,info,prometheus,metrics,env,loggers
+      base-path: /actuator
+  endpoint:
+    health:
+      probes:
+        enabled: true         # Liveness/Readiness 분리 엔드포인트 활성화
+      show-details: always
+      show-components: always
+    prometheus:
+      access: read-only
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}   # 모든 메트릭에 서비스 태그
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  info:
+    env:
+      enabled: true
+    build:
+      enabled: true           # ⭐ build-info.properties 자동 노출
+    git:
+      enabled: true           # ⭐ Git 정보도 자동 노출 (선택)
+
+# ==================== 로깅 ====================
+logging:
+  level:
+    root: INFO
+    com.portfolio: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG
+
+---
+# ==================== Profile: prod / k8s ====================
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://postgres:5432/productdb}
+    username: ${DB_USERNAME:product}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate       # 운영에선 DDL 자동변경 금지
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+  h2:
+    console:
+      enabled: false
+
+logging:
+  level:
+    root: INFO
+    com.portfolio: INFO
+    org.hibernate.SQL: INFO

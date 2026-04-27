@@ -1,0 +1,66 @@
+# === Gradle ===
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# === IntelliJ IDEA ===
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+# === VS Code ===
+.vscode/
+
+# === Eclipse ===
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+# === NetBeans ===
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# === macOS ===
+.DS_Store
+
+# === Windows ===
+Thumbs.db
+desktop.ini
+
+# === 환경변수/시크릿 (절대 커밋 금지) ===
+.env
+.env.local
+*.pem
+*.key
+secrets/
+*-secret.yaml
+*-secret.yml
+
+# === 로그 ===
+*.log
+logs/
+
+# === 임시 파일 ===
+*.tmp
+*.bak
+*.swp
+*~
+
+# === Spring Boot 자동 생성 ===
+HELP.md
+
+# === Git 정보 (플러그인이 빌드 시 생성) ===
+# git.properties는 빌드 산출물이지만 build/ 안에 생성되므로 위에서 무시됨
