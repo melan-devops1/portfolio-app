@@ -1,3 +1,4 @@
+# ───── 문서 1 (default - 항상 활성) ─────
 spring:
   application:
     name: product-service
@@ -6,6 +7,9 @@ spring:
   # ⭐ Graceful shutdown timeout (K8s preStop hook과 정합)
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  mvc:
+    problemdetails:
+      enabled: true
 
   # DB 설정 (환경변수 주입 가능, K8s에서 ConfigMap/Secret 연동)
   datasource:
@@ -78,6 +82,7 @@ logging:
     org.hibernate.SQL: DEBUG
 
 ---
+# ───── 문서 2 (prod 프로파일에서만 활성) ─────
 # ==================== Profile: prod / k8s ====================
 spring:
   config:

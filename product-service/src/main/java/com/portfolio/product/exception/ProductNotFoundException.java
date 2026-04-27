@@ -1,4 +1,7 @@
 package com.portfolio.product.exception;
 
-public class ProductNotFoundException {
+public class ProductNotFoundException extends RuntimeException {
+    public ProductNotFoundException(Long id) {
+        super("Product not found: id=" + id);
+    }
 }

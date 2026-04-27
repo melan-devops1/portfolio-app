@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Spring Boot 기본 conversion rules / pattern properties 가져오기 -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- application.yml의 spring.application.name 값을 logback context로 노출 -->
+    <springProperty scope="context" name="APP_NAME"
+                    source="spring.application.name" defaultValue="unknown"/>
+
+    <!-- ===== Profile: local (사람이 읽기 좋은 컬러 포맷) ===== -->
+    <springProfile name="local">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{36}) [%X{requestId:-}] - %msg%n</pattern>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- ===== Profile: prod / k8s (JSON 구조화 로그 - Fluent Bit 파싱 최적) ===== -->
+    <springProfile name="prod,k8s">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <!-- MDC 전체가 기본 포함됨. requestId, traceId 등 자동 노출 -->
+                <customFields>{"service":"${APP_NAME}"}</customFields>
+                <timeZone>UTC</timeZone>
+                <fieldNames>
+                    <timestamp>@timestamp</timestamp>
+                    <message>message</message>
+                    <thread>thread</thread>
+                    <logger>logger</logger>
+                    <level>level</level>
+                </fieldNames>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
+    </springProfile>
+
+</configuration>
