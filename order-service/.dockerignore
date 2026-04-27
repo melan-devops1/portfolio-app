@@ -1,0 +1,44 @@
+# Gradle
+.gradle/
+build/
+!build/libs/*.jar
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+out/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test results
+test-results/
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Documentation (이미지에 들어갈 필요 없음)
+README.md
+*.md
+docs/
+
+# Local secrets / config (절대 안 들어가야 함)
+.env
+.env.*
+*.pem
+*.key

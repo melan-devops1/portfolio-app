@@ -64,3 +64,8 @@ bootJar {
 springBoot {
 	buildInfo()
 }
+
+// plain jar 비활성화
+jar {
+	enabled = false
+}
