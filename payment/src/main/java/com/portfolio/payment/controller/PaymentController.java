@@ -1,58 +1,40 @@
 package com.portfolio.payment.controller;
 
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.MDC;
-import org.springframework.core.Ordered;
-import org.springframework.core.annotation.Order;
-import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
+import com.portfolio.payment.dto.PaymentRequest;
+import com.portfolio.payment.dto.PaymentResponse;
+import com.portfolio.payment.service.PaymentService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-import java.util.UUID;
+import java.net.URI;
+import java.util.List;
 
-/**
- * 분산 추적용 Request ID 필터.
- * <p>order-service에서 전파해주는 X-Request-Id를 받아 MDC에 저장.
- * <p>product/order와 동일한 패턴.
- */
-@Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
-public class PaymentController extends OncePerRequestFilter {
+@RestController
+@RequestMapping("/api/payments")
+@RequiredArgsConstructor
+@Validated
+public class PaymentController {
 
-    public static final String REQUEST_ID_HEADER = "X-Request-Id";
-    public static final String MDC_KEY = "requestId";
-    private static final int MAX_LENGTH = 128;
+    private final PaymentService paymentService;
 
-    @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
-
-        String requestId = resolveRequestId(request.getHeader(REQUEST_ID_HEADER));
-
-        MDC.put(MDC_KEY, requestId);
-        response.setHeader(REQUEST_ID_HEADER, requestId);
-
-        try {
-            filterChain.doFilter(request, response);
-        } finally {
-            MDC.remove(MDC_KEY);
-        }
+    @GetMapping
+    public List<PaymentResponse> list() {
+        return paymentService.findAll();
     }
 
-    private String resolveRequestId(String incoming) {
-        if (incoming == null || incoming.isBlank()) {
-            return UUID.randomUUID().toString();
-        }
-        if (incoming.length() > MAX_LENGTH) {
-            return UUID.randomUUID().toString();
-        }
-        if (incoming.chars().anyMatch(c -> c < 0x20)) {
-            return UUID.randomUUID().toString();
-        }
-        return incoming;
+    @GetMapping("/{id}")
+    public PaymentResponse get(@PathVariable Long id) {
+        return paymentService.findById(id);
+    }
+
+    @PostMapping
+    public ResponseEntity<PaymentResponse> process(@Valid @RequestBody PaymentRequest request) {
+        PaymentResponse processed = paymentService.process(request);
+        URI location = URI.create("/api/payments/" + processed.id());
+        return ResponseEntity.status(HttpStatus.CREATED).location(location).body(processed);
     }
 }
