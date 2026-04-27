@@ -1,0 +1,67 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.13'
+	id 'io.spring.dependency-management' version '1.1.7'
+	id 'com.gorylenko.gradle-git-properties' version '2.4.2'   // ⭐ 추가
+}
+
+group = 'com.portfolio'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	// === Spring Boot 기본 ===
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+	// === Observability (DevOps 핵심!) ===
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'io.micrometer:micrometer-registry-prometheus'   // Prometheus 메트릭
+
+	// === 구조화 로깅 (Kibana/ELK용) ===
+	implementation 'net.logstash.logback:logstash-logback-encoder:8.0'
+
+	// === DB ===
+	runtimeOnly 'org.postgresql:postgresql'
+	runtimeOnly 'com.h2database:h2'
+
+	// === Lombok ===
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+
+	// === 개발 편의 ===
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+	// === 테스트 ===
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+// 빌드 시 jar 파일 이름을 깔끔하게
+bootJar {
+	archiveFileName = "${project.name}.jar"
+}
+
+springBoot {
+	buildInfo()
+}
