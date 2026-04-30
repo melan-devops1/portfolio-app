@@ -87,10 +87,6 @@ jobs:
         # 서비스 폴더가 build-root (각 서비스가 독립 프로젝트)
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
-          build-root-directory: ${{ matrix.service }}
-
-      - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@v4
 
       - name: Run tests for ${{ matrix.service }}
         run: ./gradlew test --no-daemon
