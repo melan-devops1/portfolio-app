@@ -37,7 +37,7 @@ jobs:
     outputs:
       services: ${{ steps.filter.outputs.changes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # paths-filter가 최근 커밋과 비교하려면 1개 이상 history 필요
           # main push 시점이라 직전 커밋과 비교
@@ -73,7 +73,7 @@ jobs:
 
     steps:
       # ─── 코드 체크아웃 ────────────────────────────────────────
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # ─── Java 21 + Gradle 캐싱 ────────────────────────────────
       - name: Set up Java 21
@@ -83,7 +83,7 @@ jobs:
           java-version: '21'
 
       - name: Set up Gradle (with caching)
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
         # main 브랜치는 cache-write 권한 (PR과 달리)
         # 여기서 만든 캐시를 PR 빌드가 읽음 (cache-read-only)
 
@@ -122,7 +122,7 @@ jobs:
       # mode=max: 모든 레이어 캐시 (mode=min은 최종만)
       - name: Build and push image
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.service }}
           file: ${{ matrix.service }}/Dockerfile
