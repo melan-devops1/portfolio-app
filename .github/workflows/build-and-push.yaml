@@ -11,11 +11,15 @@
 #      d. ECR push (commit SHA + latest 태그)
 # 인증: OIDC (정적 자격증명 0개, ADR-0017)
 #
-# 면접 어필 포인트:
+# Gradle 프로젝트 구조 (패턴 B — 독립 프로젝트 모음):
+#   각 서비스 폴더로 cd 후 ./gradlew 호출.
+#
+# 포인트:
 # - Multi-stage Docker (ADR-0009) + GitHub Actions 레이어 캐싱
 # - 변경된 서비스만 빌드 (모노레포 효율성)
 # - Trivy 보안 스캔 통합 (ADR-0010 Phase 3 통합 계획 실현)
 # - OIDC로 정적 자격증명 0개 (ADR-0017 첫 실전)
+# - BuildKit attestation 자동 첨부 (ADR-0010 [Pending] 해소)
 ###############################################################################
 
 name: Build and Push
@@ -84,12 +88,14 @@ jobs:
 
       - name: Set up Gradle (with caching)
         uses: gradle/actions/setup-gradle@v4
-        # main 브랜치는 cache-write 권한 (PR과 달리)
-        # 여기서 만든 캐시를 PR 빌드가 읽음 (cache-read-only)
+        # 서비스 폴더가 build-root (각 서비스가 독립 프로젝트)
+        with:
+          build-root-directory: ${{ matrix.service }}
 
       # ─── Gradle 빌드 ───────────────────────────────────────────
       - name: Build jar for ${{ matrix.service }}
-        run: ./gradlew :${{ matrix.service }}:bootJar --no-daemon
+        working-directory: ${{ matrix.service }}
+        run: ./gradlew clean bootJar --no-daemon
 
       # ─── AWS OIDC 인증 (ADR-0017 첫 실전) ─────────────────────
       - name: Configure AWS credentials (OIDC)
@@ -118,8 +124,7 @@ jobs:
             type=raw,value=latest                # latest 태그
 
       # ─── Docker 빌드 + push (BuildKit 캐싱) ────────────────────
-      # cache-from / cache-to 로 GitHub Actions 캐시(gha) 활용, 서비스마다 캐시 분리
-      # mode=max: 모든 레이어 캐시 (mode=min은 최종만)
+      # context는 서비스 폴더 (build/libs/*.jar 가 그 안에 있음)
       - name: Build and push image
         id: build
         uses: docker/build-push-action@v6
@@ -138,7 +143,6 @@ jobs:
       # ─── Trivy 보안 스캔 (ADR-0010) ───────────────────────────
       # 빌드 후 push 전이면 더 좋지만 build-push-action이 합쳐있어
       # push 후 즉시 스캔하는 방식. CRITICAL 발견 시 워크플로우 실패.
-      # 다음 push 전엔 fix 필요.
       - name: Trivy scan
         uses: aquasecurity/trivy-action@master
         with:
@@ -148,8 +152,6 @@ jobs:
           exit-code: '1'              # CRITICAL 1개라도 나오면 실패
           ignore-unfixed: true         # patch 없는 CVE는 무시
           format: 'table'
-          # baseline은 docs/security/trivy-baseline.md (ADR-0010)
-          # CI 단계에선 CRITICAL만 차단, HIGH는 별도 리포트로 (Phase 5+)
 
       # ─── Summary 출력 ──────────────────────────────────────────
       - name: Workflow summary

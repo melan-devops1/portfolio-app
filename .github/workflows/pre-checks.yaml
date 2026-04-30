@@ -3,10 +3,21 @@
 #
 # 트리거: PR open/sync (main 대상)
 # 동작: 변경된 서비스 감지 → matrix로 병렬 lint + 테스트
-# 외부 자원 영향: 0 (AWS 호출 없음, 빌드 산출물 push 없음)
 #
-# 변경된 서비스 감지: dorny/paths-filter@v3
-# Java/Gradle: actions/setup-java@v4 + gradle/actions/setup-gradle@v3 (자동 캐싱)
+# Gradle 프로젝트 구조 (패턴 B — 독립 프로젝트 모음):
+#   portfolio-app/
+#   ├── product-service/   ← 독립 Gradle 프로젝트 (자체 gradlew, settings.gradle)
+#   ├── order-service/     ← 독립
+#   └── payment-service/   ← 독립
+#   각 서비스 폴더로 cd 후 ./gradlew 호출 필요.
+#
+# 액션 버전 (2026-04 기준 Node 24 호환):
+#   actions/checkout@v6
+#   actions/setup-java@v4 (Node 24 호환됨)
+#   gradle/actions/setup-gradle@v4
+#   gradle/actions/wrapper-validation@v4
+#   dorny/paths-filter@v3 (Node 20, 2026-09까지 작동, 대체재 없음)
+#   actions/upload-artifact@v4 (Node 24 호환됨)
 ###############################################################################
 
 name: PR Checks
@@ -28,11 +39,11 @@ jobs:
     permissions:
       pull-requests: read
     outputs:
-      services: ${{ steps.filter.outputs.changes }} # 매칭된 필터 이름들의 JSON 배열
+      services: ${{ steps.filter.outputs.changes }}
     steps:
       - uses: actions/checkout@v6
 
-      - uses: dorny/paths-filter@v3 # Node 20, 2026-09까지 작동 (대체재 없음)
+      - uses: dorny/paths-filter@v3
         id: filter
         with:
           # 각 필터의 이름이 "서비스 이름"이 됨
@@ -58,19 +69,22 @@ jobs:
       matrix:
         # detect-changes에서 출력한 JSON 배열을 matrix로
         service: ${{ fromJson(needs.detect-changes.outputs.services) }}
+    # 모든 step의 작업 디렉토리를 서비스 폴더로 (패턴 B 정합)
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4     # Node 24 호환 ✅
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Gradle (with caching)
         uses: gradle/actions/setup-gradle@v4
-        # gradle wrapper 캐싱 + ~/.gradle/caches 자동 캐싱
-        # cache-read-only는 PR 빌드의 캐시가 main의 캐시를 오염시키지 않게 함
+        # 서비스 폴더가 build-root (각 서비스가 독립 프로젝트)
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
           build-root-directory: ${{ matrix.service }}
@@ -79,13 +93,13 @@ jobs:
         uses: gradle/actions/wrapper-validation@v4
 
       - name: Run tests for ${{ matrix.service }}
-        run: |
-          cd ${{ matrix.service }}
-          ./gradlew test --no-daemon
+        run: ./gradlew test --no-daemon
+
       - name: Upload test report (on failure)
         if: failure()
-        uses: actions/upload-artifact@v4    # Node 24 호환 ✅
+        uses: actions/upload-artifact@v4
         with:
           name: test-reports-${{ matrix.service }}
-          path: ${{ matrix.service }}/build/reports/tests/
+          # working-directory가 서비스 폴더라 상대 경로
+          path: build/reports/tests/
           retention-days: 7
