@@ -107,6 +107,10 @@ jobs:
       matrix:
         service: ${{ fromJson(needs.detect-changes.outputs.services) }}
 
+    # 다음 job(update-manifests)이 사용할 image tag 출력
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+
     steps:
       # ─── 코드 체크아웃 ────────────────────────────────────────
       - uses: actions/checkout@v6
@@ -177,16 +181,57 @@ jobs:
           ignore-unfixed: true
           format: 'table'
 
+      # ─── 5.4: portfolio-manifests의 image tag 자동 갱신 ───
+      # PAT으로 portfolio-manifests checkout → kustomize edit set image → commit + push
+      # ArgoCD가 이 commit 감지 → 자동 sync → 새 이미지로 배포
+      - name: Checkout portfolio-manifests
+        uses: actions/checkout@v6
+        with:
+          repository: melan-devops1/portfolio-manifests
+          token: ${{ secrets.MANIFESTS_PAT }}
+          path: manifests-repo
+
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@v3
+
+      - name: Update image tag in portfolio-manifests
+        working-directory: manifests-repo/apps/${{ matrix.service }}/base
+        run: |
+          # kustomization.yaml의 images: newTag를 새 commit-sha로 갱신
+          kustomize edit set image \
+            portfolio/${{ matrix.service }}=${{ steps.login-ecr.outputs.registry }}/portfolio/${{ matrix.service }}:${{ steps.meta.outputs.version }}
+          
+          # 변경사항 확인
+          echo "=== 변경된 kustomization.yaml ==="
+          cat kustomization.yaml
+
+      - name: Commit and push manifest update
+        working-directory: manifests-repo
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          
+          # 변경된 파일이 있는지 확인 (없으면 commit 생략)
+          if git diff --quiet apps/${{ matrix.service }}/base/kustomization.yaml; then
+            echo "No changes to commit (image tag already up-to-date)"
+            exit 0
+          fi
+          
+          git add apps/${{ matrix.service }}/base/kustomization.yaml
+          git commit -m "ci(deploy): bump ${{ matrix.service }} to ${{ steps.meta.outputs.version }} [skip ci]" \
+                     -m "Source commit: ${{ github.sha }}" \
+                     -m "Triggered by: ${{ github.event_name }}" \
+                     -m "Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          git push
+
       # ─── Summary 출력 ──────────────────────────────────────────
       - name: Workflow summary
         if: always()
         run: |
-          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Build & Deploy Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Service**: ${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Image**: ${{ steps.login-ecr.outputs.registry }}/portfolio/${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tags**:" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: ${{ steps.login-ecr.outputs.registry }}/portfolio/${{ matrix.service }}:${{ steps.meta.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Digest**: \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Manifest**: portfolio-manifests/apps/${{ matrix.service }}/base/kustomization.yaml" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitOps**: ArgoCD가 manifest 변경을 감지하면 자동 배포" >> $GITHUB_STEP_SUMMARY
