@@ -89,8 +89,6 @@ jobs:
       - name: Set up Gradle (with caching)
         uses: gradle/actions/setup-gradle@v4
         # 서비스 폴더가 build-root (각 서비스가 독립 프로젝트)
-        with:
-          build-root-directory: ${{ matrix.service }}
 
       # ─── Gradle 빌드 ───────────────────────────────────────────
       - name: Build jar for ${{ matrix.service }}
