@@ -110,17 +110,23 @@ GitHub Actions 워크플로우에서 Trivy를 빌드 단계에 포함:
 - Trivy DB 다운로드 시간 (vulndb 91MB + javadb 859MB) — 함정 #14에 박제됨
   - mitigation: CI에서 actions/cache 활용 (Phase 3에서 적용)
 
-### 면접 답변용 포인트
+### 한마디로 하면
 "보안 스캔은 Trivy 빌드 시점 스캔 + ECR scan_on_push의 다층 방어로 구성했습니다.
 CRITICAL은 무조건 빌드 차단, HIGH는 우리 코드 영향도를 평가해 baseline 등록 가능하지만
 만료일을 명시해 정기 재평가하도록 했습니다. 이는 '모든 CVE 즉시 차단'이 현실적으로
 불가능한 Java 생태계 특성을 고려한 균형 정책입니다."
 
-### 면접 추가 답변 (Docker BuildKit attestation)
-[Pending: Phase 4 진입 시 본 ADR 보강 예정]
-"Phase 3 K8s 배포 단계에서 Docker BuildKit이 자동으로 SLSA provenance + SBOM을
-ECR에 함께 push하는 걸 확인했습니다. 별도 도구 없이 supply chain 보안 표준을 준수하는
-효과를 얻었고, 향후 Sigstore/Cosign 도입 시 이 attestation을 검증 단계로 활용 가능합니다."
+### Docker BuildKit attestation (Phase 3 Epic 5에서 정식 적용)
+
+CI 파이프라인의 docker/build-push-action@v5에서 `provenance: true`, `sbom: true` 설정으로
+SLSA provenance + SBOM이 ECR에 자동 첨부됨. 별도 도구 없이 supply chain 보안 표준을
+준수하는 효과.
+
+포인트:
+"GitHub Actions의 docker/build-push-action에 provenance와 sbom 옵션을 켜서 BuildKit이
+자동으로 SLSA Provenance level 2와 SPDX 형식 SBOM을 생성해 ECR에 attestation으로
+첨부하도록 했습니다. 별도 도구나 워크플로우 단계 없이 supply chain 표준을 준수했고,
+향후 Sigstore/Cosign 도입 시 이 attestation을 자동 검증 게이트로 활용할 수 있습니다."
 
 ## Alternatives Considered
 
