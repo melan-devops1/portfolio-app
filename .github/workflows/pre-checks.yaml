@@ -73,13 +73,15 @@ jobs:
         # cache-read-only는 PR 빌드의 캐시가 main의 캐시를 오염시키지 않게 함
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
+          build-root-directory: ${{ matrix.service }}
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
       - name: Run tests for ${{ matrix.service }}
-        run: ./gradlew :${{ matrix.service }}:test --no-daemon
-
+        run: |
+          cd ${{ matrix.service }}
+          ./gradlew test --no-daemon
       - name: Upload test report (on failure)
         if: failure()
         uses: actions/upload-artifact@v4    # Node 24 호환 ✅
