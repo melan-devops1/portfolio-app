@@ -96,6 +96,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-reports-${{ matrix.service }}
-          # working-directory가 서비스 폴더라 상대 경로
-          path: build/reports/tests/
+          # upload-artifact는 GITHUB_WORKSPACE 기준이라 명시적 절대 경로
+          path: ${{ matrix.service }}/build/reports/tests/
           retention-days: 7
