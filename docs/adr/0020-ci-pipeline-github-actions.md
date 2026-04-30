@@ -70,11 +70,10 @@ build:
 - `aws-actions/configure-aws-credentials@v4`로 OIDC JWT → STS 임시 자격증명 발급
 - AWS access key를 GitHub Secret에 저장하지 않음
 
-### 5) 이미지 태깅: SHA + latest
-- `docker/metadata-action@v5`로 자동 생성
+### 5) 이미지 태깅: SHA only (IMMUTABLE 정책 정합)
 - `<commit-sha-short>` (예: `a1b2c3d`) — 정확한 추적성
-- `latest` — 사람이 인식하기 쉬움
-- ADR-0016 IMMUTABLE 정책과 정합 (SHA는 항상 unique)
+- `latest` 태그는 ADR-0016 IMMUTABLE 정책과 충돌해 사용 안 함
+- (latest는 매 push마다 같은 이름이라 IMMUTABLE에서 두 번째 push 거부됨)
 
 ### 6) Docker 빌드: BuildKit + 레이어 캐싱
 - `docker/build-push-action@v6`
