@@ -15,7 +15,7 @@ import java.net.URI;
 import java.util.List;
 
 /**
- * Product REST API.
+ * Product REST API
  *
  * <p>HTTP 입출력만 담당하고 비즈니스 로직은 {@link ProductService}에 위임한다 —
  * 컨트롤러는 얇게 유지(thin controller).
