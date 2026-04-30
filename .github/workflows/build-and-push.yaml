@@ -1,0 +1,165 @@
+###############################################################################
+# Build and Push — main merge 시점 ECR push
+#
+# 트리거: main 브랜치 push (PR merge 또는 직접 push)
+# 동작:
+#   1. 변경된 서비스 감지 (dorny/paths-filter)
+#   2. matrix로 변경된 서비스마다 병렬:
+#      a. Gradle 빌드 (캐싱)
+#      b. Docker 이미지 빌드 (BuildKit + 레이어 캐싱)
+#      c. Trivy 스캔 (CRITICAL 차단, ADR-0010)
+#      d. ECR push (commit SHA + latest 태그)
+# 인증: OIDC (정적 자격증명 0개, ADR-0017)
+#
+# 면접 어필 포인트:
+# - Multi-stage Docker (ADR-0009) + GitHub Actions 레이어 캐싱
+# - 변경된 서비스만 빌드 (모노레포 효율성)
+# - Trivy 보안 스캔 통합 (ADR-0010 Phase 3 통합 계획 실현)
+# - OIDC로 정적 자격증명 0개 (ADR-0017 첫 실전)
+###############################################################################
+
+name: Build and Push
+
+on:
+  push:
+    branches: [main]
+
+# 같은 브랜치에 빠르게 연속 push 시 최신 것만 실행
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false   # build 중간에 끊기면 ECR에 부분 업로드 위험 → 끝까지
+
+jobs:
+  # ─── 1단계: 변경된 서비스 감지 ───────────────────────────────────
+  detect-changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # paths-filter가 최근 커밋과 비교하려면 1개 이상 history 필요
+          # main push 시점이라 직전 커밋과 비교
+          fetch-depth: 2
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            product-service:
+              - 'product-service/**'
+            order-service:
+              - 'order-service/**'
+            payment-service:
+              - 'payment-service/**'
+
+  # ─── 2단계: 빌드 + 스캔 + push ──────────────────────────────────
+  build-and-push:
+    name: Build & Push (${{ matrix.service }})
+    needs: detect-changes
+    if: needs.detect-changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+
+    # OIDC 사용을 위한 권한
+    permissions:
+      id-token: write    # JWT 발급용
+      contents: read     # 코드 체크아웃
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
+
+    steps:
+      # ─── 코드 체크아웃 ────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      # ─── Java 21 + Gradle 캐싱 ────────────────────────────────
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle (with caching)
+        uses: gradle/actions/setup-gradle@v3
+        # main 브랜치는 cache-write 권한 (PR과 달리)
+        # 여기서 만든 캐시를 PR 빌드가 읽음 (cache-read-only)
+
+      # ─── Gradle 빌드 ───────────────────────────────────────────
+      - name: Build jar for ${{ matrix.service }}
+        run: ./gradlew :${{ matrix.service }}:bootJar --no-daemon
+
+      # ─── AWS OIDC 인증 (ADR-0017 첫 실전) ─────────────────────
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # ─── ECR 로그인 ────────────────────────────────────────────
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ─── Docker BuildKit 셋업 (레이어 캐싱) ───────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ─── 이미지 메타데이터 (태그 자동 생성) ─────────────────
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.login-ecr.outputs.registry }}/portfolio/${{ matrix.service }}
+          tags: |
+            type=sha,prefix=,format=short        # 짧은 SHA (예: a1b2c3d)
+            type=raw,value=latest                # latest 태그
+
+      # ─── Docker 빌드 + push (BuildKit 캐싱) ────────────────────
+      # cache-from / cache-to 로 GitHub Actions 캐시(gha) 활용, 서비스마다 캐시 분리
+      # mode=max: 모든 레이어 캐시 (mode=min은 최종만)
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service }}
+          file: ${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+          # BuildKit이 SBOM + provenance 자동 첨부 (ADR-0010 보강 계획 실현)
+          provenance: true
+          sbom: true
+
+      # ─── Trivy 보안 스캔 (ADR-0010) ───────────────────────────
+      # 빌드 후 push 전이면 더 좋지만 build-push-action이 합쳐있어
+      # push 후 즉시 스캔하는 방식. CRITICAL 발견 시 워크플로우 실패.
+      # 다음 push 전엔 fix 필요.
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          # 푸시된 이미지의 정확한 digest로 스캔 (태그 충돌 방지)
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/portfolio/${{ matrix.service }}@${{ steps.build.outputs.digest }}
+          severity: 'CRITICAL'
+          exit-code: '1'              # CRITICAL 1개라도 나오면 실패
+          ignore-unfixed: true         # patch 없는 CVE는 무시
+          format: 'table'
+          # baseline은 docs/security/trivy-baseline.md (ADR-0010)
+          # CI 단계에선 CRITICAL만 차단, HIGH는 별도 리포트로 (Phase 5+)
+
+      # ─── Summary 출력 ──────────────────────────────────────────
+      - name: Workflow summary
+        if: always()
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Service**: ${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: ${{ steps.login-ecr.outputs.registry }}/portfolio/${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tags**:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "- **Digest**: \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
