@@ -23,6 +23,13 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 spring && \
     adduser  --system --uid 1001 --ingroup spring spring
 
+# ⭐ OpenTelemetry Java Agent 다운로드 (Phase 4 Epic 9)
+# 활성화는 K8s deployment.yaml의 JAVA_TOOL_OPTIONS 환경변수에서 결정
+# 즉 이 jar이 있어도 환경변수 박지 않으면 자동 비활성화
+ARG OTEL_AGENT_VERSION=2.26.1
+ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_AGENT_VERSION}/opentelemetry-javaagent.jar /opt/otel/opentelemetry-javaagent.jar
+RUN chmod 644 /opt/otel/opentelemetry-javaagent.jar
+
 # 변경 빈도가 낮은 순서대로 복사 (Docker 레이어 캐시 최적화)
 COPY --from=extractor --chown=spring:spring /opt/dependencies/          ./
 COPY --from=extractor --chown=spring:spring /opt/spring-boot-loader/    ./
