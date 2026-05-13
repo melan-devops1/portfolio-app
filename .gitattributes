@@ -1,0 +1,54 @@
+# ──────────────────────────────────────────────────────────────
+# Line-ending 통일 — Windows/WSL 혼용 환경에서 CRLF↔LF churn 방지
+#
+# Background:
+#   commit ceae4fb ("test: trigger full gitops flow") 같은 +629/-629
+#   diff (실제 변경 0줄, line ending만 변경)가 두 번 다시 생기지 않도록.
+#
+# 동작:
+#   · text 파일은 모두 작업본/저장본 모두 LF로 정규화
+#   · 일부 윈도우 전용(.bat/.cmd/.ps1)만 CRLF 유지
+#   · 바이너리는 텍스트 변환 대상에서 제외
+# ──────────────────────────────────────────────────────────────
+
+# 기본: 모든 텍스트 파일은 자동 감지 + 작업본/저장본 LF
+*               text=auto eol=lf
+
+# 윈도우 전용 스크립트는 CRLF 유지 (cmd.exe가 LF 처리 못 함)
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+*.ps1           text eol=crlf
+
+# 유닉스 스크립트는 LF 강제
+*.sh            text eol=lf
+gradlew         text eol=lf
+
+# 자주 쓰는 소스/설정 — 명시적으로 LF (auto 감지에 맡기지 않음)
+*.java          text eol=lf
+*.kt            text eol=lf
+*.gradle        text eol=lf
+*.gradle.kts    text eol=lf
+*.properties    text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.json          text eol=lf
+*.xml           text eol=lf
+*.md            text eol=lf
+Dockerfile      text eol=lf
+.dockerignore   text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+
+# 바이너리 — line ending 변환 대상 제외
+*.jar           binary
+*.war           binary
+*.class         binary
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.pdf           binary
+*.zip           binary
+*.gz            binary
+*.tar           binary

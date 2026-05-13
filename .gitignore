@@ -64,3 +64,6 @@ HELP.md
 
 # === Git 정보 (플러그인이 빌드 시 생성) ===
 # git.properties는 빌드 산출물이지만 build/ 안에 생성되므로 위에서 무시됨
+
+# === Claude Code 작업 메타 (worktree 등) ===
+.claude/
